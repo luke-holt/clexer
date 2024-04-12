@@ -38,8 +38,8 @@ typedef enum {
     PLUSASSIGN, ORASSIGN, DIVASSIGN,
     MINUSMINUS, PLUSPLUS,
 
-    // symbols
-    NUMBER, STRING, IDENTIFIER, SYMBOL,
+    // literals
+    NUMBER, STRING, CHARACTER, IDENTIFIER, SYMBOL,
 } TokenType;
 
 typedef struct {
@@ -80,7 +80,7 @@ const char *tokentypenames[] = {
     "PLUSASSIGN", "ORASSIGN", "DIVASSIGN",
     "MINUSMINUS", "PLUSPLUS",
 
-    "NUMBER", "STRING", "IDENTIFIER", "SYMBOL",
+    "NUMBER", "STRING", "CHARACTER", "IDENTIFIER", "SYMBOL",
 };
 
 static char *filebuffer;
@@ -124,7 +124,7 @@ main(int argc, char *argv[])
 void
 parse_tokens(void)
 {
-    size_t line, len;
+    size_t line;
     char *str, *cur;
 
     line = 1; // file line number count
@@ -193,13 +193,23 @@ parse_tokens(void)
         case ',': type = COMMA; break;
         case ':': type = COLON; break;
         case ';': type = SEMICOLON; break;
-        case '\'': type = SQUOTE; break;
-        case '"': 
+        case '\'': 
+            da_append(str, cur++); // opening '
+            if ('\'' == *cur)
+                die("E: empty char literal at %s:%lu", filename, line);
+            if ('\\' == *cur)
+                da_append(str, cur++); // escape backslash
+            da_append(str, cur++); // TODO: validate escaped characters
+            if ('\'' != *cur)
+                die("E: invalid char literal at %s:%lu", filename, line);
+            da_append(str, cur); // closing '
+            type = CHARACTER;
+            break;
+        case '"':
             do {
                 da_append(str, cur++);
-                // TODO: handle escaped double quotes
-                // if (*cur == '\n')
-                    // die("E: String error at %s:%lu", filename, line);
+                if (*cur == '\n')
+                    die("E: string literal error at %s:%lu", filename, line);
             } while (*cur != '"');
             da_append(str, cur);
             type = STRING;
@@ -224,7 +234,7 @@ parse_tokens(void)
                 } while (!(*cur == '*' && next == '/'));
                 da_append(str, cur++);
                 da_append(str, cur);
-                type = /* test */WHITESPACE;
+                type = WHITESPACE;
             }
             else type = FSLASH;
             break;
@@ -243,7 +253,7 @@ parse_tokens(void)
             break;
         }
 
-        if (STRING == type) {
+        if (STRING == type || CHARACTER == type) {
             size_t len;
             len = da_len(str);
             if (len) {
@@ -299,8 +309,7 @@ print_tokens(void)
             prev_line = t->l;
             printf("\n%lu: ", prev_line);
         }
-
-        if ((t->t == SYMBOL) || (t->t == STRING))
+        if (t->t == SYMBOL || t->t == STRING || t->t == CHARACTER)
             printf("%s ", t->s);
         else
             printf("%s ", tokentypenames[t->t]);
