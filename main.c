@@ -10,11 +10,13 @@
 #define MAX_TOKEN_LEN (32)
 
 typedef enum {
+    WHITESPACE,
+
     // single chars
     TILDE, BANG, HASH, MOD, XOR, AMP, STAR,
-    LPAREN, RPAREN, MINUS, PLUS, UNDERSCORE,
+    LPAREN, RPAREN, MINUS, PLUS,
     EQ, LBRACK, RBRACK, LBRACE, RBRACE,
-    LARROW, RARROW, DOT, COMMA, COLON, SEMICOLON,
+    LANGLE, RANGLE, DOT, COMMA, COLON, SEMICOLON,
     SQUOTE, DQUOTE, VBAR, FSLASH, BSLASH, QMARK,
 
     // keywords
@@ -37,7 +39,7 @@ typedef enum {
     MINUSMINUS, PLUSPLUS,
 
     // symbols
-    NUMBER, STRING, IDENTIFIER,
+    NUMBER, STRING, IDENTIFIER, SYMBOL,
 } TokenType;
 
 typedef struct {
@@ -51,11 +53,15 @@ static void new_token(TokenType type, char *str, size_t len, size_t line);
 static void print_tokens(void);
 static void destroy_tokens(void);
 
+const char *filename = "main.c";
+
 const char *tokentypenames[] = {
+    "WHITESPACE",
+
     "TILDE", "BANG", "HASH", "MOD", "XOR", "AMP", "STAR",
-    "LPAREN", "RPAREN", "MINUS", "PLUS", "UNDERSCORE",
+    "LPAREN", "RPAREN", "MINUS", "PLUS",
     "EQ", "LBRACK", "RBRACK", "LBRACE", "RBRACE",
-    "LARROW", "RARROW", "DOT", "COMMA", "COLON", "SEMICOLON",
+    "LANGLE", "RANGLE", "DOT", "COMMA", "COLON", "SEMICOLON",
     "SQUOTE", "DQUOTE", "VBAR", "FSLASH", "BSLASH", "QMARK",
 
     "BREAK", "CASE", "CHAR", "CONST",
@@ -74,7 +80,7 @@ const char *tokentypenames[] = {
     "PLUSASSIGN", "ORASSIGN", "DIVASSIGN",
     "MINUSMINUS", "PLUSPLUS",
 
-    "NUMBER", "STRING", "IDENTIFIER",
+    "NUMBER", "STRING", "IDENTIFIER", "SYMBOL",
 };
 
 static char *filebuffer;
@@ -85,7 +91,7 @@ int
 main(int argc, char *argv[])
 {
     FILE *f;
-    f = fopen("main.c", "r");
+    f = fopen(filename, "r");
     if (!f)
         die("Could not open main.c");
 
@@ -104,7 +110,7 @@ main(int argc, char *argv[])
     filebuffer[fsize] = '\0';
 
     // create dynamic array
-    tokens = da_create(sizeof(*tokens), 256);
+    tokens = da_create(sizeof(Token), 256);
 
     parse_tokens();
 
@@ -118,105 +124,148 @@ main(int argc, char *argv[])
 void
 parse_tokens(void)
 {
-    size_t line;
-    line = 1; // start count at 1
-    for (size_t i = 0; i < strlen(filebuffer); i++) {
-        char c = filebuffer[i];
-        char next = filebuffer[i+1];
+    size_t line, len;
+    char *str, *cur;
+
+    line = 1; // file line number count
+    str = da_create(sizeof(*str), 64);
+    cur = filebuffer;
+    while (*cur != '\0') {
         TokenType type;
-        switch (c) {
+        char next;
+        next = *(cur+1);
+        switch (*cur) {
         case '~':
-            if ('=' == next) { type = TILDEASSIGN; i++; }
+            if ('=' == next) { type = TILDEASSIGN; cur++; }
             else type = TILDE;
-            new_token(type, NULL, 0, line);
             break;
         case '!': 
-            if ('=' == next) { type = NEQ; i++; }
+            if ('=' == next) { type = NEQ; cur++; }
             else type = BANG;
-            new_token(type, NULL, 0, line);
             break;
-        case '#': new_token(HASH, NULL, 0, line); break;
+        case '#': type = HASH; break;
         case '%':
-            if ('=' == next) { type = MODASSIGN; i++; }
+            if ('=' == next) { type = MODASSIGN; cur++; }
             else type = MOD;
-            new_token(type, NULL, 0, line);
             break;
         case '^':
-            if ('=' == next) { type = XORASSIGN; i++; }
+            if ('=' == next) { type = XORASSIGN; cur++; }
             else type = XOR;
-            new_token(type, NULL, 0, line);
             break;
         case '&':
-            if ('&' == next) { type = AND; i++; }
-            else if ('=' == next) { type = AMPASSIGN; i++; }
+            if ('&' == next) { type = AND; cur++; }
+            else if ('=' == next) { type = AMPASSIGN; cur++; }
             else type = AMP;
-            new_token(type, NULL, 0, line);
             break;
         case '*':
-            if ('=' == next) { type = STARASSIGN; i++; }
+            if ('=' == next) { type = STARASSIGN; cur++; }
             else type = STAR;
-            new_token(type, NULL, 0, line);
             break;
-        case '(': new_token(LPAREN, NULL, 0, line); break;
-        case ')': new_token(RPAREN, NULL, 0, line); break;
+        case '(': type = LPAREN; break;
+        case ')': type = RPAREN; break;
         case '-':
-            if ('=' == next) { type = MINUSASSIGN; i++; }
-            else if ('-' == next) { type = MINUSMINUS; i++; }
+            if ('=' == next) { type = MINUSASSIGN; cur++; }
+            else if ('-' == next) { type = MINUSMINUS; cur++; }
             else type = MINUS;
-            new_token(type, NULL, 0, line);
             break;
         case '+':
-            if ('=' == next) { type = PLUSASSIGN; i++; }
-            else if ('+' == next) { type = PLUSPLUS; i++; }
+            if ('=' == next) { type = PLUSASSIGN; cur++; }
+            else if ('+' == next) { type = PLUSPLUS; cur++; }
             else type = PLUS;
-            new_token(type, NULL, 0, line);
             break;
-        case '_': new_token(UNDERSCORE, NULL, 0, line); break;
         case '=':
-            if ('=' == next) { type = EQEQ; i++; }
+            if ('=' == next) { type = EQEQ; cur++; }
             else type = EQ;
-            new_token(type, NULL, 0, line);
             break;
-        case '[': new_token(LBRACK, NULL, 0, line); break;
-        case ']': new_token(RBRACK, NULL, 0, line); break;
-        case '{': new_token(LBRACE, NULL, 0, line); break;
-        case '}': new_token(RBRACE, NULL, 0, line); break;
+        case '[': type = LBRACK; break;
+        case ']': type = RBRACK; break;
+        case '{': type = LBRACE; break;
+        case '}': type = RBRACE; break;
         case '<':
-            if ('=' == next) { type = LTEQ; i++; }
-            else type = LARROW;
-            new_token(type, NULL, 0, line);
+            if ('=' == next) { type = LTEQ; cur++; }
+            else type = LANGLE;
             break;
         case '>':
-            if ('=' == next) { type = GTEQ; i++; }
-            else type = RARROW;
-            new_token(type, NULL, 0, line);
+            if ('=' == next) { type = GTEQ; cur++; }
+            else type = RANGLE;
             break;
-        case '.': new_token(DOT, NULL, 0, line); break;
-        case ',': new_token(COMMA, NULL, 0, line); break;
-        case ':': new_token(COLON, NULL, 0, line); break;
-        case ';': new_token(SEMICOLON, NULL, 0, line); break;
-        case '\'': new_token(SQUOTE, NULL, 0, line); break;
-        case '"': new_token(DQUOTE, NULL, 0, line); break;
+        case '.': type = DOT; break;
+        case ',': type = COMMA; break;
+        case ':': type = COLON; break;
+        case ';': type = SEMICOLON; break;
+        case '\'': type = SQUOTE; break;
+        case '"': 
+            do {
+                da_append(str, cur++);
+                // TODO: handle escaped double quotes
+                // if (*cur == '\n')
+                    // die("E: String error at %s:%lu", filename, line);
+            } while (*cur != '"');
+            da_append(str, cur);
+            type = STRING;
+            break;
         case '|':
-            if ('=' == next) { type = ORASSIGN; i++; }
+            if ('=' == next) { type = ORASSIGN; cur++; }
             else type = VBAR;
-            new_token(type, NULL, 0, line);
             break;
         case '/':
-            if ('=' == next) { type = DIVASSIGN; i++; }
+            if ('=' == next) { type = DIVASSIGN; cur++; }
+            else if ('/' == next) {
+                // comment detected. collect chars until newline
+                while (*cur != '\n')
+                    da_append(str, cur++);
+                line++;
+                type = WHITESPACE;
+            }
+            else if ('*' == next) {
+                do {
+                    da_append(str, cur++);
+                    next = *(cur+1);
+                } while (!(*cur == '*' && next == '/'));
+                da_append(str, cur++);
+                da_append(str, cur);
+                type = /* test */WHITESPACE;
+            }
             else type = FSLASH;
-            new_token(type, NULL, 0, line);
             break;
-        case '\\': new_token(BSLASH, NULL, 0, line); break;
-        case '?': new_token(QMARK, NULL, 0, line); break;
-        case '\n': line++; break;
+        case '\\': type = BSLASH; break;
+        case '?': type = QMARK; break;
+        // whitespace
+        case '\n': line++;
+        case '\r':
         case ' ':
-        case '\t': break; // whitespace
+        case '\t':
+            type = WHITESPACE;
+            break;
+        case '_':
         default:
-            // fputc(*c, stdout);
+            type = SYMBOL;
             break;
         }
+
+        if (STRING == type) {
+            size_t len;
+            len = da_len(str);
+            if (len) {
+                new_token(STRING, str, len, line);
+                da_clear(str);
+            }
+        }
+        else if (SYMBOL != type) {
+            size_t len;
+            len = da_len(str);
+            if (len) {
+                new_token(SYMBOL, str, len, line);
+                da_clear(str);
+            }
+            if (WHITESPACE != type)
+                new_token(type, NULL, 0, line);
+        }
+        else da_append(str, cur);
+        cur++;
     }
+
+    da_destroy(str);
 }
 
 void
@@ -229,8 +278,9 @@ new_token(TokenType type, char *str, size_t len, size_t line)
         char *p = malloc(len + 1);
         if (!p)
             die("malloc failed");
-        strncpy(t.s, str, len);
-        t.s[len] = '\0';
+        strncpy(p, str, len);
+        p[len] = '\0';
+        t.s = p;
     }
     else t.s = NULL;
     da_append(tokens, &t);
@@ -242,13 +292,18 @@ print_tokens(void)
     size_t i, prev_line;
     i = 0;
     prev_line = 1;
+    printf("1: ");
     while (i < da_len(tokens)) {
         Token *t = &tokens[i++];
         if (t->l > prev_line) {
             prev_line = t->l;
             printf("\n%lu: ", prev_line);
         }
-        printf("%s ", tokentypenames[t->t]);
+
+        if ((t->t == SYMBOL) || (t->t == STRING))
+            printf("%s ", t->s);
+        else
+            printf("%s ", tokentypenames[t->t]);
     }
     fputc('\n', stdout);
 }
