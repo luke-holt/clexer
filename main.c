@@ -11,11 +11,11 @@
 
 typedef enum {
     // single chars
-    TILDE='~', BANG='!', HASH='#', MOD='%', XOR='^', AMP='&', STAR='*',
-    LPAREN='(', RPAREN=')', MINUS='-', PLUS='+', UNDERSCORE='_',
-    EQ='=', LBRACK='[', RBRACK=']', LBRACE='{', RBRACE='}',
-    LARROW='<', RARROW='>', DOT='.', COMMA=',', COLON=':', SEMICOLON=';',
-    SQUOTE='\'', DQUOTE='"', VBAR='|', FSLASH='/', BSLASH='\\', QMARK='?',
+    TILDE, BANG, HASH, MOD, XOR, AMP, STAR,
+    LPAREN, RPAREN, MINUS, PLUS, UNDERSCORE,
+    EQ, LBRACK, RBRACK, LBRACE, RBRACE,
+    LARROW, RARROW, DOT, COMMA, COLON, SEMICOLON,
+    SQUOTE, DQUOTE, VBAR, FSLASH, BSLASH, QMARK,
 
     // keywords
     BREAK,    CASE,     CHAR,     CONST,
@@ -29,6 +29,12 @@ typedef enum {
 
     // logical operators
     NEQ, EQEQ, LTEQ, GTEQ, OR, AND,
+
+    // special assignment
+    TILDEASSIGN, MODASSIGN, XORASSIGN,
+    AMPASSIGN, STARASSIGN, MINUSASSIGN,
+    PLUSASSIGN, ORASSIGN, DIVASSIGN,
+    MINUSMINUS, PLUSPLUS,
 
     // symbols
     NUMBER, STRING, IDENTIFIER,
@@ -44,6 +50,32 @@ static void parse_tokens(void);
 static void new_token(TokenType type, char *str, size_t len, size_t line);
 static void print_tokens(void);
 static void destroy_tokens(void);
+
+const char *tokentypenames[] = {
+    "TILDE", "BANG", "HASH", "MOD", "XOR", "AMP", "STAR",
+    "LPAREN", "RPAREN", "MINUS", "PLUS", "UNDERSCORE",
+    "EQ", "LBRACK", "RBRACK", "LBRACE", "RBRACE",
+    "LARROW", "RARROW", "DOT", "COMMA", "COLON", "SEMICOLON",
+    "SQUOTE", "DQUOTE", "VBAR", "FSLASH", "BSLASH", "QMARK",
+
+    "BREAK", "CASE", "CHAR", "CONST",
+    "CONTINUE", "DEFAULT", "DO", "DOUBLE",
+    "ELSE", "ENUM", "EXTERN", "FLOAT",
+    "FOR", "GOTO", "IF", "INLINE",
+    "INT", "LONG", "REGISTER", "RETURN",
+    "SHORT", "SIGNED", "STATIC", "STRUCT",
+    "SWITCH", "TYPEDEF", "UNION", "UNSIGNED",
+    "VOID", "VOLATILE", "WHILE",
+
+    "NEQ", "EQEQ", "LTEQ", "GTEQ", "OR", "AND",
+
+    "TILDEASSIGN", "MODASSIGN", "XORASSIGN",
+    "AMPASSIGN", "STARASSIGN", "MINUSASSIGN",
+    "PLUSASSIGN", "ORASSIGN", "DIVASSIGN",
+    "MINUSMINUS", "PLUSPLUS",
+
+    "NUMBER", "STRING", "IDENTIFIER",
+};
 
 static char *filebuffer;
 
@@ -89,31 +121,59 @@ parse_tokens(void)
     size_t line;
     line = 1; // start count at 1
     for (size_t i = 0; i < strlen(filebuffer); i++) {
-        char *c = &filebuffer[i];
+        char c = filebuffer[i];
+        char next = filebuffer[i+1];
         TokenType type;
-        switch (*c) {
-        case '~': new_token(TILDE, NULL, 0, line); break;
+        switch (c) {
+        case '~':
+            if ('=' == next) { type = TILDEASSIGN; i++; }
+            else type = TILDE;
+            new_token(type, NULL, 0, line);
+            break;
         case '!': 
-            if ('=' == *(c+1)) { type = NEQ; i++; }
+            if ('=' == next) { type = NEQ; i++; }
             else type = BANG;
             new_token(type, NULL, 0, line);
             break;
         case '#': new_token(HASH, NULL, 0, line); break;
-        case '%': new_token(MOD, NULL, 0, line); break;
-        case '^': new_token(XOR, NULL, 0, line); break;
+        case '%':
+            if ('=' == next) { type = MODASSIGN; i++; }
+            else type = MOD;
+            new_token(type, NULL, 0, line);
+            break;
+        case '^':
+            if ('=' == next) { type = XORASSIGN; i++; }
+            else type = XOR;
+            new_token(type, NULL, 0, line);
+            break;
         case '&':
-            if ('&' == *(c+1)) { type = AND; i++; }
+            if ('&' == next) { type = AND; i++; }
+            else if ('=' == next) { type = AMPASSIGN; i++; }
             else type = AMP;
             new_token(type, NULL, 0, line);
             break;
-        case '*': new_token(STAR, NULL, 0, line); break;
+        case '*':
+            if ('=' == next) { type = STARASSIGN; i++; }
+            else type = STAR;
+            new_token(type, NULL, 0, line);
+            break;
         case '(': new_token(LPAREN, NULL, 0, line); break;
         case ')': new_token(RPAREN, NULL, 0, line); break;
-        case '-': new_token(MINUS, NULL, 0, line); break;
-        case '+': new_token(PLUS, NULL, 0, line); break;
+        case '-':
+            if ('=' == next) { type = MINUSASSIGN; i++; }
+            else if ('-' == next) { type = MINUSMINUS; i++; }
+            else type = MINUS;
+            new_token(type, NULL, 0, line);
+            break;
+        case '+':
+            if ('=' == next) { type = PLUSASSIGN; i++; }
+            else if ('+' == next) { type = PLUSPLUS; i++; }
+            else type = PLUS;
+            new_token(type, NULL, 0, line);
+            break;
         case '_': new_token(UNDERSCORE, NULL, 0, line); break;
         case '=':
-            if ('=' == *(c+1)) { type = EQEQ; i++; }
+            if ('=' == next) { type = EQEQ; i++; }
             else type = EQ;
             new_token(type, NULL, 0, line);
             break;
@@ -122,12 +182,12 @@ parse_tokens(void)
         case '{': new_token(LBRACE, NULL, 0, line); break;
         case '}': new_token(RBRACE, NULL, 0, line); break;
         case '<':
-            if ('=' == *(c+1)) { type = LTEQ; i++; }
+            if ('=' == next) { type = LTEQ; i++; }
             else type = LARROW;
             new_token(type, NULL, 0, line);
             break;
         case '>':
-            if ('=' == *(c+1)) { type = GTEQ; i++; }
+            if ('=' == next) { type = GTEQ; i++; }
             else type = RARROW;
             new_token(type, NULL, 0, line);
             break;
@@ -137,14 +197,24 @@ parse_tokens(void)
         case ';': new_token(SEMICOLON, NULL, 0, line); break;
         case '\'': new_token(SQUOTE, NULL, 0, line); break;
         case '"': new_token(DQUOTE, NULL, 0, line); break;
-        case '|': new_token(VBAR, NULL, 0, line); break;
-        case '/': new_token(FSLASH, NULL, 0, line); break;
+        case '|':
+            if ('=' == next) { type = ORASSIGN; i++; }
+            else type = VBAR;
+            new_token(type, NULL, 0, line);
+            break;
+        case '/':
+            if ('=' == next) { type = DIVASSIGN; i++; }
+            else type = FSLASH;
+            new_token(type, NULL, 0, line);
+            break;
         case '\\': new_token(BSLASH, NULL, 0, line); break;
         case '?': new_token(QMARK, NULL, 0, line); break;
         case '\n': line++; break;
         case ' ':
-        case '\t': // whitespace
-        default: break;
+        case '\t': break; // whitespace
+        default:
+            // fputc(*c, stdout);
+            break;
         }
     }
 }
@@ -170,16 +240,15 @@ void
 print_tokens(void)
 {
     size_t i, prev_line;
-
     i = 0;
     prev_line = 1;
     while (i < da_len(tokens)) {
         Token *t = &tokens[i++];
         if (t->l > prev_line) {
-            printf(" <- %lu\n", prev_line);
             prev_line = t->l;
+            printf("\n%lu: ", prev_line);
         }
-        fputc((char)t->t, stdout);
+        printf("%s ", tokentypenames[t->t]);
     }
     fputc('\n', stdout);
 }
