@@ -6,6 +6,8 @@
 
 #include "util.h"
 
+#define DA_FROM_DATA_PTR(p) ((DA *)((char *)p - sizeof(DA)))
+
 typedef struct {
     unsigned int isize;
     unsigned int capacity;
@@ -19,8 +21,9 @@ _da_create(size_t isize, size_t capacity)
     assert(isize);
     assert(capacity);
     DA *a;
-    a = malloc(sizeof(*a) - 1 + (isize * capacity));
-    assert(a);
+    a = malloc(sizeof(DA) + (isize * capacity));
+    if (!a)
+        return NULL;
     a->isize = isize;
     a->capacity = capacity;
     a->count = 0;
@@ -31,7 +34,7 @@ void
 _da_destroy(void **arr)
 {
     DA *a;
-    a = (DA *)((char *)*arr - sizeof(*a));
+    a = DA_FROM_DATA_PTR(*arr);
     free(a);
     *arr = NULL;
 }
@@ -40,10 +43,10 @@ void
 _da_append(void **arr, void *item)
 {
     DA *a;
-    a = (DA *)((char *)*arr - sizeof(*a));
+    a = DA_FROM_DATA_PTR(*arr);
     if (a->count == a->capacity) {
         a->capacity *= 2;
-        a = erealloc(a, sizeof(*a) - 1 + a->capacity * a->isize);
+        a = erealloc(a, sizeof(DA) + a->capacity * a->isize);
         *arr = a->data;
     }
     memcpy((a->data + a->count * a->isize), item, a->isize);
@@ -54,7 +57,7 @@ void
 _da_pop(void *arr)
 {
     DA *a;
-    a = (DA *)((char *)arr - sizeof(*a));
+    a = DA_FROM_DATA_PTR(arr);
     if (a->count)
         a->count--;
 }
@@ -63,7 +66,15 @@ size_t
 _da_len(void *arr)
 {
     DA *a;
-    a = (DA *)((char *)arr - sizeof(*a));
+    a = DA_FROM_DATA_PTR(arr);
     return a->count;
+}
+
+void
+_da_clear(void *arr)
+{
+    DA *a;
+    a = DA_FROM_DATA_PTR(arr);
+    a->count = 0;
 }
 
