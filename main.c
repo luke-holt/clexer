@@ -53,6 +53,33 @@ static void new_token(TokenType type, char *str, size_t len, size_t line);
 static void print_tokens(void);
 static void destroy_tokens(void);
 
+static inline bool
+is_num(char c)
+{
+    return BETWEEN(c, '0', '9');
+}
+
+static inline bool
+is_alpha(char c)
+{
+    return BETWEEN(c, 'a', 'z') || BETWEEN(c, 'A', 'Z');
+}
+
+static inline bool
+is_alphanum(char c)
+{
+    return is_num(c) || is_alpha(c);
+}
+
+static inline bool
+is_in(char c, char *s)
+{
+    while (*s != '\0')
+        if (c == *s++)
+            return true;
+    return false;
+}
+
 const char *filename = "main.c";
 
 const char *tokentypenames[] = {
@@ -109,7 +136,6 @@ main(int argc, char *argv[])
 
     filebuffer[fsize] = '\0';
 
-    // create dynamic array
     tokens = da_create(sizeof(Token), 256);
 
     parse_tokens();
@@ -249,15 +275,21 @@ parse_tokens(void)
             break;
         case '_':
         default:
-            type = SYMBOL;
+            if (!da_len(str) && is_num(*cur)) {
+                do da_append(str, cur++);
+                while (is_num(*cur)); // TODO: propper number handling
+                cur--; // cur is incremented at the end
+                type = NUMBER;
+            }
+            else type = SYMBOL;
             break;
         }
 
-        if (STRING == type || CHARACTER == type) {
+        if (STRING == type || CHARACTER == type || NUMBER == type) {
             size_t len;
             len = da_len(str);
             if (len) {
-                new_token(STRING, str, len, line);
+                new_token(type, str, len, line);
                 da_clear(str);
             }
         }
@@ -309,7 +341,7 @@ print_tokens(void)
             prev_line = t->l;
             printf("\n%lu: ", prev_line);
         }
-        if (t->t == SYMBOL || t->t == STRING || t->t == CHARACTER)
+        if (t->t == SYMBOL || t->t == STRING || t->t == CHARACTER || t->t == NUMBER)
             printf("%s ", t->s);
         else
             printf("%s ", tokentypenames[t->t]);
