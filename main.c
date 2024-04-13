@@ -303,7 +303,7 @@ parse_tokens(void)
                 cur--; // cur is incremented at the end
                 type = NUMBER;
             }
-            else if (!da_len(str) && is_alpha(*cur)) {
+            else if (!da_len(str) && (is_alpha(*cur) || '_' == *cur)) {
                 do da_append(str, cur++);
                 while (is_alphanum(*cur) || '_' == *cur);
                 cur--;
