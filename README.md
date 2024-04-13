@@ -26,3 +26,5 @@ $ clexer hello_world.c
 
 Right now, the tool prints the parsed tokens in human-readable form. Eventually, they'll be parsed into an Abstract Syntax Tree for more useful work.
 
+For a more impressive demonstration, try running the tool on `main.c`.
+
