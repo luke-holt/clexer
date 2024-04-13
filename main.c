@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <regex.h>
 
 #include "dynamic_array.h"
@@ -84,7 +85,7 @@ is_in(char c, char *s)
     return false;
 }
 
-const char *filename = "main.c";
+const char *filename;
 
 const char *tokentypenames[] = {
     "WHITESPACE",
@@ -125,10 +126,17 @@ static Token *tokens;
 int
 main(int argc, char *argv[])
 {
+    if (argc != 2)
+        die("usage: %s <cfile>", argv[0]);
+
+    filename = argv[1];
+    if (access(filename, F_OK))
+        die("Could not find %s", filename);
+
     FILE *f;
     f = fopen(filename, "r");
     if (!f)
-        die("Could not open main.c");
+        die("Could not open %s", filename);
 
     size_t fsize;
     fseek(f, 0, SEEK_END);
@@ -143,6 +151,7 @@ main(int argc, char *argv[])
     fclose(f);
 
     filebuffer[fsize] = '\0';
+
 
     da_create(tokens, sizeof(Token), 256);
     if (!tokens)
