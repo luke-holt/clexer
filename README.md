@@ -24,3 +24,5 @@ $ clexer hello_world.c
 6: } 
 ```
 
+Right now, the tool prints the parsed tokens in human-readable form. Eventually, they'll be parsed into an Abstract Syntax Tree for more useful work.
+
