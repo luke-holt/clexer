@@ -15,19 +15,20 @@ typedef struct {
     char data[];
 } DA;
 
-void *
-_da_create(size_t isize, size_t capacity)
+void
+_da_create(void **arr, size_t isize, size_t capacity)
 {
+    assert(arr);
     assert(isize);
     assert(capacity);
     DA *a;
     a = malloc(sizeof(DA) + (isize * capacity));
-    if (!a)
-        return NULL;
-    a->isize = isize;
-    a->capacity = capacity;
-    a->count = 0;
-    return a->data;
+    if (a) {
+        a->isize = isize;
+        a->capacity = capacity;
+        a->count = 0;
+    }
+    *arr = a->data;
 }
 
 void
