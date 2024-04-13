@@ -38,8 +38,12 @@ typedef enum {
     PLUSASSIGN, ORASSIGN, DIVASSIGN,
     MINUSMINUS, PLUSPLUS,
 
+    PTRACCESS,
+
     // literals
-    NUMBER, STRING, CHARACTER, IDENTIFIER, SYMBOL,
+    NUMBER, STRING, CHARACTER, COMMENT, SYMBOL,
+
+    UNKNOWN,
 } TokenType;
 
 typedef struct {
@@ -85,29 +89,33 @@ const char *filename = "main.c";
 const char *tokentypenames[] = {
     "WHITESPACE",
 
-    "TILDE", "BANG", "HASH", "MOD", "XOR", "AMP", "STAR",
-    "LPAREN", "RPAREN", "MINUS", "PLUS",
-    "EQ", "LBRACK", "RBRACK", "LBRACE", "RBRACE",
-    "LANGLE", "RANGLE", "DOT", "COMMA", "COLON", "SEMICOLON",
-    "SQUOTE", "DQUOTE", "VBAR", "FSLASH", "BSLASH", "QMARK",
+    "~", "!", "#", "%", "^", "&", "*",
+    "(", ")", "-", "+",
+    "=", "[", "]", "{", "}",
+    "<", ">", ".", ",", ":", ";",
+    "'", "\"", "|", "/", "\\", "?", 
 
-    "BREAK", "CASE", "CHAR", "CONST",
-    "CONTINUE", "DEFAULT", "DO", "DOUBLE",
-    "ELSE", "ENUM", "EXTERN", "FLOAT",
-    "FOR", "GOTO", "IF", "INLINE",
-    "INT", "LONG", "REGISTER", "RETURN",
-    "SHORT", "SIGNED", "STATIC", "STRUCT",
-    "SWITCH", "TYPEDEF", "UNION", "UNSIGNED",
-    "VOID", "VOLATILE", "WHILE",
+    "break", "case", "char", "const",
+    "continue", "default", "do", "double",
+    "else", "enum", "extern", "float",
+    "for", "goto", "if", "inline",
+    "int", "long", "register", "return",
+    "short", "signed", "static", "struct",
+    "switch", "typedef", "union", "unsigned",
+    "void", "volatile", "while",
 
-    "NEQ", "EQEQ", "LTEQ", "GTEQ", "OR", "AND",
+    "!=", "==", "<=", ">=", "||", "&&",
 
-    "TILDEASSIGN", "MODASSIGN", "XORASSIGN",
-    "AMPASSIGN", "STARASSIGN", "MINUSASSIGN",
-    "PLUSASSIGN", "ORASSIGN", "DIVASSIGN",
-    "MINUSMINUS", "PLUSPLUS",
+    "~=", "%=", "^=",
+    "&=", "*=", "-=",
+    "+=", "|=", "/=",
+    "--", "++",
 
-    "NUMBER", "STRING", "CHARACTER", "IDENTIFIER", "SYMBOL",
+    "->",
+
+    "NUMBER", "STRING", "CHARACTER", "COMMENT", "SYMBOL",
+
+    "UNKNOWN",
 };
 
 static char *filebuffer;
@@ -136,30 +144,35 @@ main(int argc, char *argv[])
 
     filebuffer[fsize] = '\0';
 
-    tokens = da_create(sizeof(Token), 256);
+    da_create(tokens, sizeof(Token), 256);
+    if (!tokens)
+        die("E: da_create failed");
 
     parse_tokens();
-
     print_tokens();
 
     destroy_tokens();
-
     return 0;
 }
 
 void
 parse_tokens(void)
 {
-    size_t line;
+    size_t line, newline;
     char *str, *cur;
 
+    da_create(str, sizeof(*str), 64);
+
     line = 1; // file line number count
-    str = da_create(sizeof(*str), 64);
     cur = filebuffer;
     while (*cur != '\0') {
         TokenType type;
         char next;
+
+        newline = 0;
+        da_clear(str);
         next = *(cur+1);
+
         switch (*cur) {
         case '~':
             if ('=' == next) { type = TILDEASSIGN; cur++; }
@@ -192,6 +205,7 @@ parse_tokens(void)
         case '-':
             if ('=' == next) { type = MINUSASSIGN; cur++; }
             else if ('-' == next) { type = MINUSMINUS; cur++; }
+            else if ('>' == next) { type = PTRACCESS; cur++; }
             else type = MINUS;
             break;
         case '+':
@@ -233,9 +247,11 @@ parse_tokens(void)
             break;
         case '"':
             do {
+                if (*cur == '\\')
+                    da_append(str, cur++); // TODO: validate escaped characters
                 da_append(str, cur++);
                 if (*cur == '\n')
-                    die("E: string literal error at %s:%lu", filename, line);
+                    die("E: string literal error at %s:%lu", filename, line, str);
             } while (*cur != '"');
             da_append(str, cur);
             type = STRING;
@@ -247,27 +263,24 @@ parse_tokens(void)
         case '/':
             if ('=' == next) { type = DIVASSIGN; cur++; }
             else if ('/' == next) {
-                // comment detected. collect chars until newline
-                while (*cur != '\n')
-                    da_append(str, cur++);
-                line++;
-                type = WHITESPACE;
+                do da_append(str, cur++);
+                while (*cur != '\n');
+                newline++;
+                type = COMMENT;
             }
             else if ('*' == next) {
-                do {
-                    da_append(str, cur++);
-                    next = *(cur+1);
-                } while (!(*cur == '*' && next == '/'));
+                do da_append(str, cur++);
+                while (!(*cur == '*' && *(cur+1) == '/'));
                 da_append(str, cur++);
                 da_append(str, cur);
-                type = WHITESPACE;
+                type = COMMENT;
             }
             else type = FSLASH;
             break;
         case '\\': type = BSLASH; break;
         case '?': type = QMARK; break;
         // whitespace
-        case '\n': line++;
+        case '\n': newline++;
         case '\r':
         case ' ':
         case '\t':
@@ -281,30 +294,24 @@ parse_tokens(void)
                 cur--; // cur is incremented at the end
                 type = NUMBER;
             }
-            else type = SYMBOL;
+            else if (!da_len(str) && is_alpha(*cur)) {
+                do da_append(str, cur++);
+                while (is_alphanum(*cur) || '_' == *cur);
+                cur--;
+                type = SYMBOL;
+            }
+            else type = UNKNOWN;
             break;
         }
 
-        if (STRING == type || CHARACTER == type || NUMBER == type) {
-            size_t len;
-            len = da_len(str);
-            if (len) {
-                new_token(type, str, len, line);
-                da_clear(str);
-            }
-        }
-        else if (SYMBOL != type) {
-            size_t len;
-            len = da_len(str);
-            if (len) {
-                new_token(SYMBOL, str, len, line);
-                da_clear(str);
-            }
-            if (WHITESPACE != type)
-                new_token(type, NULL, 0, line);
-        }
-        else da_append(str, cur);
+        if (STRING == type || CHARACTER == type || NUMBER == type || COMMENT == type || SYMBOL == type)
+            new_token(type, str, da_len(str), line);
+        else if (WHITESPACE == type);
+        else if (UNKNOWN == type)
+            new_token(type, cur, 1, line);
+        else new_token(type, NULL, 0, line);
         cur++;
+        line += newline;
     }
 
     da_destroy(str);
@@ -341,8 +348,10 @@ print_tokens(void)
             prev_line = t->l;
             printf("\n%lu: ", prev_line);
         }
-        if (t->t == SYMBOL || t->t == STRING || t->t == CHARACTER || t->t == NUMBER)
+        if (t->t == SYMBOL || t->t == STRING || t->t == CHARACTER || t->t == NUMBER || t->t == COMMENT)
             printf("%s ", t->s);
+        else if (t->t == UNKNOWN)
+            printf("UNKNOWN(%s) ", t->s);
         else
             printf("%s ", tokentypenames[t->t]);
     }
