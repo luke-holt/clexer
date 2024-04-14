@@ -61,6 +61,8 @@ static void new_token(TokenType type, char *str, size_t len, size_t line, size_t
 static void print_tokens(void);
 static void destroy_tokens(void);
 
+static TokenType lookup_keyword(char *s);
+
 static inline bool
 is_digit(char c)
 {
@@ -153,7 +155,6 @@ main(int argc, char *argv[])
 
     filebuffer[fsize] = '\0';
 
-
     da_create(tokens, sizeof(Token), 256);
     if (!tokens)
         die("E: da_create failed");
@@ -168,63 +169,61 @@ main(int argc, char *argv[])
 void
 parse_tokens(void)
 {
-    size_t line, newline;
+    size_t line;
     char *str, *cur, *line_start;
 
     da_create(str, sizeof(*str), 64);
-
-    line = 1; // file line number count
+    line = 1;
     cur = filebuffer;
+
     while (*cur != '\0') {
         TokenType type;
-        char next;
+        bool newline;
 
-        newline = 0;
-        da_clear(str);
-        next = *(cur+1);
+        newline = false;
 
         switch (*cur) {
         case '~':
-            if ('=' == next) { type = TILDEASSIGN; cur++; }
+            if ('=' == *(cur+1)) { type = TILDEASSIGN; cur++; }
             else type = TILDE;
             break;
         case '!': 
-            if ('=' == next) { type = NEQ; cur++; }
+            if ('=' == *(cur+1)) { type = NEQ; cur++; }
             else type = BANG;
             break;
         case '#': type = HASH; break;
         case '%':
-            if ('=' == next) { type = MODASSIGN; cur++; }
+            if ('=' == *(cur+1)) { type = MODASSIGN; cur++; }
             else type = MOD;
             break;
         case '^':
-            if ('=' == next) { type = XORASSIGN; cur++; }
+            if ('=' == *(cur+1)) { type = XORASSIGN; cur++; }
             else type = XOR;
             break;
         case '&':
-            if ('&' == next) { type = AND; cur++; }
-            else if ('=' == next) { type = AMPASSIGN; cur++; }
+            if ('&' == *(cur+1)) { type = AND; cur++; }
+            else if ('=' == *(cur+1)) { type = AMPASSIGN; cur++; }
             else type = AMP;
             break;
         case '*':
-            if ('=' == next) { type = STARASSIGN; cur++; }
+            if ('=' == *(cur+1)) { type = STARASSIGN; cur++; }
             else type = STAR;
             break;
         case '(': type = LPAREN; break;
         case ')': type = RPAREN; break;
         case '-':
-            if ('=' == next) { type = MINUSASSIGN; cur++; }
-            else if ('-' == next) { type = MINUSMINUS; cur++; }
-            else if ('>' == next) { type = PTRACCESS; cur++; }
+            if ('=' == *(cur+1)) { type = MINUSASSIGN; cur++; }
+            else if ('-' == *(cur+1)) { type = MINUSMINUS; cur++; }
+            else if ('>' == *(cur+1)) { type = PTRACCESS; cur++; }
             else type = MINUS;
             break;
         case '+':
-            if ('=' == next) { type = PLUSASSIGN; cur++; }
-            else if ('+' == next) { type = PLUSPLUS; cur++; }
+            if ('=' == *(cur+1)) { type = PLUSASSIGN; cur++; }
+            else if ('+' == *(cur+1)) { type = PLUSPLUS; cur++; }
             else type = PLUS;
             break;
         case '=':
-            if ('=' == next) { type = EQEQ; cur++; }
+            if ('=' == *(cur+1)) { type = EQEQ; cur++; }
             else type = EQ;
             break;
         case '[': type = LBRACK; break;
@@ -232,11 +231,11 @@ parse_tokens(void)
         case '{': type = LBRACE; break;
         case '}': type = RBRACE; break;
         case '<':
-            if ('=' == next) { type = LTEQ; cur++; }
+            if ('=' == *(cur+1)) { type = LTEQ; cur++; }
             else type = LANGLE;
             break;
         case '>':
-            if ('=' == next) { type = GTEQ; cur++; }
+            if ('=' == *(cur+1)) { type = GTEQ; cur++; }
             else type = RANGLE;
             break;
         case '.': type = DOT; break;
@@ -267,19 +266,19 @@ parse_tokens(void)
             type = STRING;
             break;
         case '|':
-            if ('=' == next) { type = ORASSIGN; cur++; }
-            else if ('|' == next) { type = OR; cur++; }
+            if ('=' == *(cur+1)) { type = ORASSIGN; cur++; }
+            else if ('|' == *(cur+1)) { type = OR; cur++; }
             else type = VBAR;
             break;
         case '/':
-            if ('=' == next) { type = DIVASSIGN; cur++; }
-            else if ('/' == next) {
+            if ('=' == *(cur+1)) { type = DIVASSIGN; cur++; }
+            else if ('/' == *(cur+1)) {
                 do da_append(str, cur++);
                 while (*cur != '\n');
-                newline++;
+                newline = true;
                 type = COMMENT;
             }
-            else if ('*' == next) {
+            else if ('*' == *(cur+1)) {
                 do da_append(str, cur++);
                 while (!(*cur == '*' && *(cur+1) == '/'));
                 da_append(str, cur++);
@@ -291,7 +290,7 @@ parse_tokens(void)
         case '\\': type = BSLASH; break;
         case '?': type = QMARK; break;
         // whitespace
-        case '\n': newline++;
+        case '\n': newline = true;
         case '\r':
         case ' ':
         case '\t':
@@ -302,7 +301,6 @@ parse_tokens(void)
             if (!da_len(str) && is_digit(*cur)) {
                 bool fp;
                 fp = false;
-
                 if (*cur == '0') {
                     da_append(str, cur++);
                     // hex
@@ -329,13 +327,11 @@ parse_tokens(void)
                             da_append(str, cur++);
                     }
                 }
-
                 // suffix
                 if (fp && ((*(cur+1) == 'f') || (*(cur+1) == 'F')))
                     da_append(str, cur++);
                 else if (*(cur+1) == 'l' || *(cur+1) == 'l' || *(cur+1) == 'l' || 0)
                     ; // TODO: int literal suffix
-
                 cur--;
                 type = NUMBER;
             }
@@ -345,16 +341,27 @@ parse_tokens(void)
                 cur--;
                 type = SYMBOL;
             }
-            else type = UNKNOWN;
+            else {
+            da_append(str, cur++);
+                type = UNKNOWN;
+            }
             break;
         }
 
-        if (STRING == type || CHARACTER == type || NUMBER == type || COMMENT == type || SYMBOL == type)
+        if (SYMBOL == type) {
+            char c;
+            c = '\0';
+            da_append(str, &c);
+            type = lookup_keyword(str);
+            if (SYMBOL != type)
+                da_clear(str);
+        }
+
+        if (WHITESPACE != type) {
             new_token(type, str, da_len(str), line, (size_t)(cur - line_start));
-        else if (WHITESPACE == type);
-        else if (UNKNOWN == type)
-            new_token(type, cur, 1, line, (size_t)(cur - line_start));
-        else new_token(type, NULL, 0, line, (size_t)(cur - line_start));
+        }
+
+        da_clear(str);
         
         cur++;
         if (newline)
@@ -425,5 +432,44 @@ parse_error(char *line_str, size_t line_num, size_t col_num, char *msg)
         fputc(' ', stderr);
     fputc('^', stderr);
     die("");
+}
+
+TokenType
+lookup_keyword(char *s)
+{
+    TokenType type;
+    if (!strcmp(s, tokentypenames[BREAK])) type = BREAK;
+    else if (!strcmp(s, tokentypenames[CASE])) type = CASE;
+    else if (!strcmp(s, tokentypenames[CHAR])) type = CHAR;
+    else if (!strcmp(s, tokentypenames[CONST])) type = CONST;
+    else if (!strcmp(s, tokentypenames[CONTINUE])) type = CONTINUE;
+    else if (!strcmp(s, tokentypenames[DEFAULT])) type = DEFAULT;
+    else if (!strcmp(s, tokentypenames[DO])) type = DO;
+    else if (!strcmp(s, tokentypenames[DOUBLE])) type = DOUBLE;
+    else if (!strcmp(s, tokentypenames[ELSE])) type = ELSE;
+    else if (!strcmp(s, tokentypenames[ENUM])) type = ENUM;
+    else if (!strcmp(s, tokentypenames[EXTERN])) type = EXTERN;
+    else if (!strcmp(s, tokentypenames[FLOAT])) type = FLOAT;
+    else if (!strcmp(s, tokentypenames[FOR])) type = FOR;
+    else if (!strcmp(s, tokentypenames[GOTO])) type = GOTO;
+    else if (!strcmp(s, tokentypenames[IF])) type = IF;
+    else if (!strcmp(s, tokentypenames[INLINE])) type = INLINE;
+    else if (!strcmp(s, tokentypenames[INT])) type = INT;
+    else if (!strcmp(s, tokentypenames[LONG])) type = LONG;
+    else if (!strcmp(s, tokentypenames[REGISTER])) type = REGISTER;
+    else if (!strcmp(s, tokentypenames[RETURN])) type = RETURN;
+    else if (!strcmp(s, tokentypenames[SHORT])) type = SHORT;
+    else if (!strcmp(s, tokentypenames[SIGNED])) type = SIGNED;
+    else if (!strcmp(s, tokentypenames[STATIC])) type = STATIC;
+    else if (!strcmp(s, tokentypenames[STRUCT])) type = STRUCT;
+    else if (!strcmp(s, tokentypenames[SWITCH])) type = SWITCH;
+    else if (!strcmp(s, tokentypenames[TYPEDEF])) type = TYPEDEF;
+    else if (!strcmp(s, tokentypenames[UNION])) type = UNION;
+    else if (!strcmp(s, tokentypenames[UNSIGNED])) type = UNSIGNED;
+    else if (!strcmp(s, tokentypenames[VOID])) type = VOID;
+    else if (!strcmp(s, tokentypenames[VOLATILE])) type = VOLATILE;
+    else if (!strcmp(s, tokentypenames[WHILE])) type = WHILE;
+    else type = SYMBOL;
+    return type;
 }
 
