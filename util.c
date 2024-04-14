@@ -39,9 +39,18 @@ void *
 erealloc(void *ptr, size_t size)
 {
     void *p;
+
     if (!(p = realloc(ptr, size)))
         die("realloc:");
+    return p;
+}
 
+void *
+emalloc(size_t size)
+{
+    void *p;
+    if (!(p = malloc(size)))
+        die("malloc:");
     return p;
 }
 

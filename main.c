@@ -54,6 +54,8 @@ typedef struct {
 } Token;
 
 static void parse_tokens(void);
+static void parse_error(char *line_str, size_t line_num, size_t col_num, char *msg);
+
 static void new_token(TokenType type, char *str, size_t len, size_t line);
 static void print_tokens(void);
 static void destroy_tokens(void);
@@ -143,9 +145,7 @@ main(int argc, char *argv[])
     fsize = ftell(f);
     fseek(f, 0, SEEK_SET);
 
-    filebuffer = malloc(fsize + 1);
-    if (!filebuffer)
-        die("malloc failed");
+    filebuffer = emalloc(fsize + 1);
 
     fread(filebuffer, fsize, 1, f);
     fclose(f);
@@ -168,7 +168,7 @@ void
 parse_tokens(void)
 {
     size_t line, newline;
-    char *str, *cur;
+    char *str, *cur, *line_start;
 
     da_create(str, sizeof(*str), 64);
 
@@ -245,12 +245,12 @@ parse_tokens(void)
         case '\'': 
             da_append(str, cur++); // opening '
             if ('\'' == *cur)
-                die("E: empty char literal at %s:%lu", filename, line);
+                parse_error(line_start, line, (size_t)(cur - line_start), "empty char literal");
             if ('\\' == *cur)
                 da_append(str, cur++); // escape backslash
             da_append(str, cur++); // TODO: validate escaped characters
             if ('\'' != *cur)
-                die("E: invalid char literal at %s:%lu", filename, line);
+                parse_error(line_start, line, (size_t)(cur - line_start), "invalid char literal");
             da_append(str, cur); // closing '
             type = CHARACTER;
             break;
@@ -260,7 +260,7 @@ parse_tokens(void)
                     da_append(str, cur++); // TODO: validate escaped characters
                 da_append(str, cur++);
                 if (*cur == '\n')
-                    die("E: string literal error at %s:%lu", filename, line, str);
+                    parse_error(line_start, line, (size_t)(cur - line_start), "string literal error");
             } while (*cur != '"');
             da_append(str, cur);
             type = STRING;
@@ -319,7 +319,10 @@ parse_tokens(void)
         else if (UNKNOWN == type)
             new_token(type, cur, 1, line);
         else new_token(type, NULL, 0, line);
+        
         cur++;
+        if (newline)
+            line_start = ++cur;
         line += newline;
     }
 
@@ -333,9 +336,7 @@ new_token(TokenType type, char *str, size_t len, size_t line)
     t.t = type;
     t.l = line;
     if (str && len) {
-        char *p = malloc(len + 1);
-        if (!p)
-            die("malloc failed");
+        char *p = emalloc(len + 1);
         strncpy(p, str, len);
         p[len] = '\0';
         t.s = p;
@@ -374,5 +375,18 @@ destroy_tokens(void)
         if (tokens[i].s)
             free(tokens[i].s);
     da_destroy(tokens);
+}
+
+void
+parse_error(char *line_str, size_t line_num, size_t col_num, char *msg)
+{
+    fprintf(stderr, "E: %s at %s:%lu:%lu\n", msg, filename, line_num, col_num);
+    while (*line_str != '\n')
+        fputc(*line_str++, stderr);
+    fputc('\n', stderr);
+    while (--col_num)
+        fputc(' ', stderr);
+    fputc('^', stderr);
+    die("");
 }
 
