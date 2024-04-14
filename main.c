@@ -48,20 +48,21 @@ typedef enum {
 } TokenType;
 
 typedef struct {
-    TokenType t;
-    char *s;
-    size_t l;
+    TokenType type;
+    char *str;
+    size_t line;
+    size_t column;
 } Token;
 
 static void parse_tokens(void);
 static void parse_error(char *line_str, size_t line_num, size_t col_num, char *msg);
 
-static void new_token(TokenType type, char *str, size_t len, size_t line);
+static void new_token(TokenType type, char *str, size_t len, size_t line, size_t column);
 static void print_tokens(void);
 static void destroy_tokens(void);
 
 static inline bool
-is_num(char c)
+is_digit(char c)
 {
     return BETWEEN(c, '0', '9');
 }
@@ -75,7 +76,7 @@ is_alpha(char c)
 static inline bool
 is_alphanum(char c)
 {
-    return is_num(c) || is_alpha(c);
+    return is_digit(c) || is_alpha(c);
 }
 
 static inline bool
@@ -267,6 +268,7 @@ parse_tokens(void)
             break;
         case '|':
             if ('=' == next) { type = ORASSIGN; cur++; }
+            else if ('|' == next) { type = OR; cur++; }
             else type = VBAR;
             break;
         case '/':
@@ -295,12 +297,46 @@ parse_tokens(void)
         case '\t':
             type = WHITESPACE;
             break;
-        case '_':
+
         default:
-            if (!da_len(str) && is_num(*cur)) {
-                do da_append(str, cur++);
-                while (is_num(*cur)); // TODO: propper number handling
-                cur--; // cur is incremented at the end
+            if (!da_len(str) && is_digit(*cur)) {
+                bool fp;
+                fp = false;
+
+                if (*cur == '0') {
+                    da_append(str, cur++);
+                    // hex
+                    if (*(cur+1) == 'x' || *(cur+1) == 'X')
+                        do da_append(str, cur++);
+                        while (is_digit(*cur) || BETWEEN(*cur, 'a', 'f') || BETWEEN(*cur, 'A', 'F'));
+                    // bin
+                    else if (*(cur+1) == 'b' || *(cur+1) == 'B')
+                        do da_append(str, cur++);
+                        while (*cur == '0' || *cur == '1');
+                    // octal
+                    else
+                        do da_append(str, cur++);
+                        while (is_digit(*cur));
+                }
+                // decimal and floating point
+                else {
+                    do da_append(str, cur++);
+                    while (is_digit(*cur));
+                    if (*cur == '.') {
+                        da_append(str, cur++);
+                        fp = true;
+                        while (is_digit(*cur))
+                            da_append(str, cur++);
+                    }
+                }
+
+                // suffix
+                if (fp && ((*(cur+1) == 'f') || (*(cur+1) == 'F')))
+                    da_append(str, cur++);
+                else if (*(cur+1) == 'l' || *(cur+1) == 'l' || *(cur+1) == 'l' || 0)
+                    ; // TODO: int literal suffix
+
+                cur--;
                 type = NUMBER;
             }
             else if (!da_len(str) && (is_alpha(*cur) || '_' == *cur)) {
@@ -314,15 +350,15 @@ parse_tokens(void)
         }
 
         if (STRING == type || CHARACTER == type || NUMBER == type || COMMENT == type || SYMBOL == type)
-            new_token(type, str, da_len(str), line);
+            new_token(type, str, da_len(str), line, (size_t)(cur - line_start));
         else if (WHITESPACE == type);
         else if (UNKNOWN == type)
-            new_token(type, cur, 1, line);
-        else new_token(type, NULL, 0, line);
+            new_token(type, cur, 1, line, (size_t)(cur - line_start));
+        else new_token(type, NULL, 0, line, (size_t)(cur - line_start));
         
         cur++;
         if (newline)
-            line_start = ++cur;
+            line_start = cur;
         line += newline;
     }
 
@@ -330,18 +366,19 @@ parse_tokens(void)
 }
 
 void
-new_token(TokenType type, char *str, size_t len, size_t line)
+new_token(TokenType type, char *str, size_t len, size_t line, size_t column)
 {
     Token t;
-    t.t = type;
-    t.l = line;
+    t.type = type;
+    t.line = line;
+    t.column = column;
     if (str && len) {
         char *p = emalloc(len + 1);
         strncpy(p, str, len);
         p[len] = '\0';
-        t.s = p;
+        t.str = p;
     }
-    else t.s = NULL;
+    else t.str = NULL;
     da_append(tokens, &t);
 }
 
@@ -354,16 +391,16 @@ print_tokens(void)
     printf("1: ");
     while (i < da_len(tokens)) {
         Token *t = &tokens[i++];
-        if (t->l > prev_line) {
-            prev_line = t->l;
+        if (t->line > prev_line) {
+            prev_line = t->line;
             printf("\n%lu: ", prev_line);
         }
-        if (t->t == SYMBOL || t->t == STRING || t->t == CHARACTER || t->t == NUMBER || t->t == COMMENT)
-            printf("%s ", t->s);
-        else if (t->t == UNKNOWN)
-            printf("UNKNOWN(%s) ", t->s);
+        if (t->type == SYMBOL || t->type == STRING || t->type == CHARACTER || t->type == NUMBER || t->type == COMMENT)
+            printf("%s ", t->str);
+        else if (t->type == UNKNOWN)
+            printf("UNKNOWN(%s) ", t->str);
         else
-            printf("%s ", tokentypenames[t->t]);
+            printf("%s ", tokentypenames[t->type]);
     }
     fputc('\n', stdout);
 }
@@ -372,8 +409,8 @@ void
 destroy_tokens(void)
 {
     for (size_t i = 0; i < da_len(tokens); i++)
-        if (tokens[i].s)
-            free(tokens[i].s);
+        if (tokens[i].str)
+            free(tokens[i].str);
     da_destroy(tokens);
 }
 
