@@ -174,12 +174,14 @@ parse_tokens(void)
 
     da_create(str, sizeof(*str), 64);
     line = 1;
-    cur = filebuffer;
+    line_start = cur = filebuffer;
 
     while (*cur != '\0') {
         TokenType type;
         bool newline;
+        char *token_start;
 
+        token_start = cur;
         newline = false;
 
         switch (*cur) {
@@ -358,7 +360,7 @@ parse_tokens(void)
         }
 
         if (WHITESPACE != type) {
-            new_token(type, str, da_len(str), line, (size_t)(cur - line_start));
+            new_token(type, str, da_len(str), line, (size_t)(token_start - line_start));
         }
 
         da_clear(str);
